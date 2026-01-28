@@ -289,7 +289,48 @@ def collect_name_node(state: ConversationState) -> dict:
             if parts:
                 name = parts[0].replace("名称", "").replace("叫", "").strip()[:20]
 
-    response_text = f"""收到！工作流名称：**{name}**
+    # 让 LLM 推荐触发关键词
+    recommend_prompt = f"""根据以下工作流信息，推荐 3-5 个触发短语。
+
+工作流名称：{name}
+工作流描述：{description}
+
+要求：
+1. 短语要简洁自然，符合用户日常表达习惯
+2. 包含不同的表达方式（如中文、英文、口语化等）
+3. 严格按 JSON 数组格式输出，如：["写周报", "生成周报", "weekly report"]"""
+
+    recommend_response = llm.invoke([
+        SystemMessage(content=recommend_prompt),
+        HumanMessage(content=f"工作流：{name}")
+    ])
+
+    # 解析推荐的触发词
+    recommended_triggers = []
+    try:
+        content = recommend_response.content
+        # 处理 markdown 代码块包裹的情况
+        if "```" in content:
+            match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
+            if match:
+                content = match.group(1)
+        recommended_triggers = json.loads(content)
+    except:
+        pass
+
+    # 构建展示文本
+    if recommended_triggers:
+        triggers_suggestion = '\n'.join(f'- "{t}"' for t in recommended_triggers)
+        response_text = f"""收到！工作流名称：**{name}**
+
+接下来，请告诉我**触发短语**——当用户说什么话时，应该触发这个工作流？
+
+参考推荐：
+{triggers_suggestion}
+
+请输入您想要的触发短语（2-5 个，用逗号分隔）："""
+    else:
+        response_text = f"""收到！工作流名称：**{name}**
 
 接下来，请告诉我**触发短语**——当用户说什么话时，应该触发这个工作流？
 
@@ -532,7 +573,7 @@ def save_workflow_node(state: ConversationState) -> dict:
     collection.add_workflow(workflow)
 
     # 持久化保存到 skills 目录
-    saved_path = save_workflow(workflow, generate_markdown=True)
+    saved_path = save_workflow(workflow)
 
     success_msg = f"""✅ **工作流创建成功！**
 
@@ -642,8 +683,11 @@ def execute_workflow_node(state: ConversationState) -> dict:
 {user_input}
 
 ## 执行指令
-严格按照工作流定义执行。如果缺少必需信息，向用户询问。
-输出格式：{workflow.output_format.value}"""
+1. 严格按照工作流定义的步骤执行
+2. 如果缺少必需信息，用友好的语言向用户询问
+3. **重要**：始终用自然、友好的语言与用户交流，解释你在做什么
+4. 如果需要输出结构化数据，先用语言说明，再提供 {workflow.output_format.value} 格式的数据
+5. 不要直接输出纯数据，要有上下文说明"""
 
     response = llm.invoke([
         SystemMessage(content=execute_prompt),

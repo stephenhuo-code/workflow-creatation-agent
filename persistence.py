@@ -1,18 +1,23 @@
 """
 工作流持久化模块
 负责将工作流保存到 skills/ 目录并从中加载
+使用 YAML frontmatter 格式存储元数据
 """
 
-import os
-import json
+import re
 from pathlib import Path
 from typing import Optional
 
-from schemas import WorkflowSchema, WorkflowCollection
+import yaml
+
+from schemas import WorkflowSchema, WorkflowCollection, WorkflowStep, ActionType, OutputFormat
 
 
 # 默认 skills 目录
 SKILLS_DIR = Path(__file__).parent / "skills"
+
+# YAML frontmatter 正则匹配
+FRONTMATTER_PATTERN = re.compile(r'^---\n(.*?)\n---\n', re.DOTALL)
 
 
 def ensure_skills_dir() -> Path:
@@ -21,31 +26,23 @@ def ensure_skills_dir() -> Path:
     return SKILLS_DIR
 
 
-def save_workflow(workflow: WorkflowSchema, generate_markdown: bool = True) -> str:
+def save_workflow(workflow: WorkflowSchema) -> str:
     """
-    保存工作流到 skills 目录
+    保存工作流到 skills 目录（仅 markdown 文件）
 
     Args:
         workflow: 工作流对象
-        generate_markdown: 是否同时生成 markdown skill 文件
 
     Returns:
-        保存的 JSON 文件路径
+        保存的 markdown 文件路径
     """
     skills_dir = ensure_skills_dir()
+    md_path = skills_dir / f"{workflow.workflow_id}_skill.md"
 
-    # 保存 JSON 文件
-    json_path = skills_dir / f"{workflow.workflow_id}.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(workflow.model_dump(), f, ensure_ascii=False, indent=2)
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(workflow.to_markdown_file())
 
-    # 生成 markdown skill 文件
-    if generate_markdown:
-        md_path = skills_dir / f"{workflow.workflow_id}_skill.md"
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(workflow.to_skill_text())
-
-    return str(json_path)
+    return str(md_path)
 
 
 def load_workflow(workflow_id: str) -> Optional[WorkflowSchema]:
@@ -58,18 +55,50 @@ def load_workflow(workflow_id: str) -> Optional[WorkflowSchema]:
     Returns:
         工作流对象，如果不存在则返回 None
     """
-    json_path = SKILLS_DIR / f"{workflow_id}.json"
+    md_path = SKILLS_DIR / f"{workflow_id}_skill.md"
 
-    if not json_path.exists():
+    if not md_path.exists():
         return None
 
     try:
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return WorkflowSchema(**data)
-    except (json.JSONDecodeError, Exception) as e:
+        content = md_path.read_text(encoding="utf-8")
+        match = FRONTMATTER_PATTERN.match(content)
+        if match:
+            data = yaml.safe_load(match.group(1))
+            return _parse_workflow_data(data)
+    except Exception as e:
         print(f"加载工作流 {workflow_id} 失败: {e}")
-        return None
+
+    return None
+
+
+def _parse_workflow_data(data: dict) -> WorkflowSchema:
+    """解析 YAML 数据为 WorkflowSchema 对象"""
+    # 解析步骤
+    steps = []
+    for step_data in data.get("steps", []):
+        steps.append(WorkflowStep(
+            step_id=step_data.get("step_id", ""),
+            action=ActionType(step_data.get("action", "generate")),
+            description=step_data.get("description", ""),
+            inputs=step_data.get("inputs", []),
+            outputs=step_data.get("outputs", []),
+            prompt_template=step_data.get("prompt_template")
+        ))
+
+    return WorkflowSchema(
+        workflow_id=data.get("workflow_id", ""),
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        trigger_phrases=data.get("trigger_phrases", []),
+        domain=data.get("domain", "通用"),
+        required_inputs=data.get("required_inputs", []),
+        optional_inputs=data.get("optional_inputs", []),
+        output_format=OutputFormat(data.get("output_format", "markdown")),
+        steps=steps,
+        created_at=data.get("created_at"),
+        updated_at=data.get("updated_at")
+    )
 
 
 def load_all_workflows() -> WorkflowCollection:
@@ -84,23 +113,25 @@ def load_all_workflows() -> WorkflowCollection:
     if not SKILLS_DIR.exists():
         return collection
 
-    # 遍历所有 .json 文件
-    for json_file in SKILLS_DIR.glob("*.json"):
+    # 遍历所有 *_skill.md 文件
+    for md_file in SKILLS_DIR.glob("*_skill.md"):
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            workflow = WorkflowSchema(**data)
-            collection.add_workflow(workflow)
-            print(f"已加载工作流: {workflow.name} ({workflow.workflow_id})")
-        except (json.JSONDecodeError, Exception) as e:
-            print(f"加载工作流文件 {json_file.name} 失败: {e}")
+            content = md_file.read_text(encoding="utf-8")
+            match = FRONTMATTER_PATTERN.match(content)
+            if match:
+                data = yaml.safe_load(match.group(1))
+                workflow = _parse_workflow_data(data)
+                collection.add_workflow(workflow)
+                print(f"已加载工作流: {workflow.name} ({workflow.workflow_id})")
+        except Exception as e:
+            print(f"加载工作流文件 {md_file.name} 失败: {e}")
 
     return collection
 
 
 def delete_workflow(workflow_id: str) -> bool:
     """
-    删除工作流文件
+    删除工作流 markdown 文件
 
     Args:
         workflow_id: 工作流 ID
@@ -108,16 +139,10 @@ def delete_workflow(workflow_id: str) -> bool:
     Returns:
         是否成功删除
     """
-    json_path = SKILLS_DIR / f"{workflow_id}.json"
     md_path = SKILLS_DIR / f"{workflow_id}_skill.md"
-
-    deleted = False
-
-    if json_path.exists():
-        json_path.unlink()
-        deleted = True
 
     if md_path.exists():
         md_path.unlink()
+        return True
 
-    return deleted
+    return False

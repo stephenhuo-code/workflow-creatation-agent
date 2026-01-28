@@ -85,8 +85,42 @@ class WorkflowSchema(BaseModel):
                 skill_text += f"- 执行要点: {step.prompt_template}\n"
 
         skill_text += f"\n### 输出格式\n{self.output_format.value}\n"
-        
+
         return skill_text
+
+    def to_markdown_file(self) -> str:
+        """生成带 YAML frontmatter 的完整 markdown 文件"""
+        import yaml
+
+        # 准备 frontmatter 数据
+        metadata = {
+            "workflow_id": self.workflow_id,
+            "name": self.name,
+            "description": self.description,
+            "trigger_phrases": self.trigger_phrases,
+            "domain": self.domain,
+            "required_inputs": self.required_inputs,
+            "optional_inputs": self.optional_inputs,
+            "output_format": self.output_format.value,
+            "steps": [
+                {
+                    "step_id": s.step_id,
+                    "action": s.action.value,
+                    "description": s.description,
+                    "inputs": s.inputs,
+                    "outputs": s.outputs,
+                    "prompt_template": s.prompt_template
+                }
+                for s in self.steps
+            ],
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
+        }
+
+        frontmatter = yaml.dump(metadata, allow_unicode=True, default_flow_style=False)
+        skill_content = self.to_skill_text()
+
+        return f"---\n{frontmatter}---\n\n{skill_content}"
 
 
 class WorkflowCollection(BaseModel):

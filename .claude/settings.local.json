@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -c:*)",
-      "mcp__ide__getDiagnostics",
-      "Bash(python -m py_compile:*)"
-    ]
-  }
-}
