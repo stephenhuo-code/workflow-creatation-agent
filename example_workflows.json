@@ -1,0 +1,96 @@
+{
+  "workflows": {
+    "wf_example01": {
+      "workflow_id": "wf_example01",
+      "name": "周报生成",
+      "description": "帮助用户快速生成结构化的周报文档",
+      "trigger_phrases": ["写周报", "生成周报", "本周总结", "weekly report"],
+      "domain": "工作汇报",
+      "required_inputs": ["本周完成事项", "下周计划"],
+      "optional_inputs": ["遇到的问题", "需要的支持"],
+      "output_format": "markdown",
+      "steps": [
+        {
+          "step_id": "step_1",
+          "action": "collect",
+          "description": "收集本周完成的工作",
+          "inputs": [],
+          "outputs": ["completed_tasks"],
+          "prompt_template": "请列出你本周主要完成的工作，尽量具体说明成果"
+        },
+        {
+          "step_id": "step_2",
+          "action": "collect",
+          "description": "了解遇到的问题",
+          "inputs": [],
+          "outputs": ["issues"],
+          "prompt_template": "本周工作中遇到了什么困难或问题吗？区分已解决和待解决的"
+        },
+        {
+          "step_id": "step_3",
+          "action": "collect",
+          "description": "收集下周计划",
+          "inputs": [],
+          "outputs": ["next_week_plan"],
+          "prompt_template": "下周你计划做哪些事情？请按优先级排序"
+        },
+        {
+          "step_id": "step_4",
+          "action": "generate",
+          "description": "生成周报文档",
+          "inputs": ["completed_tasks", "issues", "next_week_plan"],
+          "outputs": ["weekly_report"],
+          "prompt_template": "根据收集的信息生成结构化周报，语气正式但不僵硬，突出成果"
+        }
+      ],
+      "created_at": "2024-01-01T00:00:00",
+      "updated_at": "2024-01-01T00:00:00"
+    },
+    "wf_example02": {
+      "workflow_id": "wf_example02",
+      "name": "竞品分析",
+      "description": "系统化分析竞争对手产品",
+      "trigger_phrases": ["分析竞品", "竞品分析", "竞争对手分析"],
+      "domain": "产品分析",
+      "required_inputs": ["竞品名称"],
+      "optional_inputs": ["分析维度", "对比基准"],
+      "output_format": "table",
+      "steps": [
+        {
+          "step_id": "step_1",
+          "action": "collect",
+          "description": "确认分析目标",
+          "inputs": [],
+          "outputs": ["target_product"],
+          "prompt_template": "请告诉我你想分析哪个竞品？"
+        },
+        {
+          "step_id": "step_2",
+          "action": "collect",
+          "description": "确认分析维度",
+          "inputs": [],
+          "outputs": ["dimensions"],
+          "prompt_template": "你希望从哪些维度分析？默认包括：产品功能、定价策略、用户口碑、市场定位"
+        },
+        {
+          "step_id": "step_3",
+          "action": "analyze",
+          "description": "多维度分析",
+          "inputs": ["target_product", "dimensions"],
+          "outputs": ["analysis_result"],
+          "prompt_template": "针对每个维度进行深入分析，提供具体数据和观察"
+        },
+        {
+          "step_id": "step_4",
+          "action": "generate",
+          "description": "生成对比表格",
+          "inputs": ["analysis_result"],
+          "outputs": ["comparison_table"],
+          "prompt_template": "生成清晰的对比表格，突出优劣势"
+        }
+      ],
+      "created_at": "2024-01-01T00:00:00",
+      "updated_at": "2024-01-01T00:00:00"
+    }
+  }
+}
