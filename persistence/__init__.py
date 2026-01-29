@@ -1,12 +1,9 @@
 """
-工作流持久化模块（兼容层）
-此文件保留用于向后兼容，实际实现已迁移到 persistence/ 模块
-
-已迁移至: persistence/storage.py
+Persistence 模块
+导出持久化相关函数
 """
 
-# 从新模块重新导出，保持向后兼容
-from persistence.storage import (
+from .storage import (
     save_workflow,
     load_workflow,
     load_all_workflows,
