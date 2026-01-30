@@ -172,6 +172,16 @@ CLASSIFY_ACTION_PROMPT = """你是 Workflow Skills Agent，负责识别工作流
 def classify_action_node(state: WorkflowSkillsState) -> dict:
     """识别操作类型（create/delete/list）"""
     logger.info("▶ 节点: classify_action | 识别工作流操作类型")
+
+    # 只有在创建流程中（creation_stage 不为空）时，才使用上游设置的 action
+    # 这样可以避免旧的 action 值影响新的请求（如删除/查看）
+    existing_action = state.get("action")
+    creation_stage = state.get("creation_stage")
+
+    if creation_stage is not None and existing_action == "create":
+        logger.info(f"✓ 创建流程中，使用 action={existing_action} (stage={creation_stage})")
+        return {"action": existing_action}
+
     user_input = _get_last_user_message(state)
     collection = WorkflowCollection(**state.get("workflow_collection", {"workflows": {}}))
 
@@ -771,6 +781,8 @@ def build_workflow_skills_subgraph():
     classify → ┬→ create_workflow (子图)
                ├→ delete_workflow
                └→ list_workflows
+
+    注：classify 节点会优先使用上游设置的 action，避免重复分类
     """
     logger.info("构建 workflow_skills 子图")
 
@@ -785,7 +797,7 @@ def build_workflow_skills_subgraph():
     # 设置入口点
     graph.set_entry_point("classify")
 
-    # 路由条件边
+    # classify 后的路由条件边
     graph.add_conditional_edges(
         "classify",
         _route_action,
